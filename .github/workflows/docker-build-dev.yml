@@ -1,0 +1,168 @@
+name: Docker-Dev-Latest
+
+on:
+  push:
+    branches:
+      - dev*
+  workflow_dispatch:
+  
+jobs:
+  build-autoendpoint:
+    strategy:
+      matrix:
+        arch: [amd64, arm64]
+        include:
+          - arch: amd64
+            runner: ubuntu-24.04
+            tag: dev-amd64
+          - arch: arm64
+            runner: ubuntu-24.04-arm
+            tag: dev-arm64
+    env:
+      package_name: autoendpoint
+      ghcr_slug: ghcr.io/forkdo/autoendpoint                
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - name: Checkout Source Code
+        uses: actions/checkout@v6
+
+      - name: Login to GitHub Container Registry (ghcr.io)
+        uses: docker/login-action@v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Docker meta
+        id: meta
+        uses: docker/metadata-action@v6
+        with:
+          images: ${{ env.ghcr_slug }}
+          tags: ${{ matrix.tag }}
+
+      - name: Build and push
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          file: ./Dockerfile
+          build-args: |
+              BINARY=${{ env.package_name }}
+              CRATE=${{ env.package_name }}
+              BUILD_ARGS=--features=redis  --no-default-features
+          platforms: linux/${{ matrix.arch }}
+          push: ${{ github.event_name != 'pull_request' }}
+          tags: ${{ env.ghcr_slug }}:${{ matrix.tag }}
+          provenance: false
+
+  build-autoconnect:
+    strategy:
+      matrix:
+        arch: [amd64, arm64]
+        include:
+          - arch: amd64
+            runner: ubuntu-24.04
+            tag: dev-amd64
+          - arch: arm64
+            runner: ubuntu-24.04-arm
+            tag: dev-arm64
+    env:
+      package_name: autoconnect
+      ghcr_slug: ghcr.io/forkdo/autoconnect                
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - name: Checkout Source Code
+        uses: actions/checkout@v6
+
+      - name: Login to GitHub Container Registry (ghcr.io)
+        uses: docker/login-action@v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Docker meta
+        id: meta
+        uses: docker/metadata-action@v6
+        with:
+          images: ${{ env.ghcr_slug }}
+          tags: ${{ matrix.tag }}
+
+      - name: Build and push
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          file: ./Dockerfile
+          build-args: |
+              BINARY=${{ env.package_name }}
+              CRATE=${{ env.package_name }}
+              BUILD_ARGS=--features=redis  --no-default-features
+          platforms: linux/${{ matrix.arch }}
+          push: ${{ github.event_name != 'pull_request' }}
+          tags: ${{ env.ghcr_slug }}:${{ matrix.tag }}
+          provenance: false
+
+  manifest-autoendpoint:
+    needs: build-autoendpoint
+    runs-on: ubuntu-24.04
+    if: needs.build-autoendpoint.result == 'success'
+    env:
+      ghcr_slug: ghcr.io/forkdo/autoendpoint
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v6
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Create and push multi-arch manifest
+        run: |
+          docker manifest create ${{ env.ghcr_slug }}:dev \
+            --amend ${{ env.ghcr_slug }}:dev-amd64 \
+            --amend ${{ env.ghcr_slug }}:dev-arm64
+          docker manifest push ${{ env.ghcr_slug }}:dev
+        shell: bash
+
+      - uses: actions/delete-package-versions@v5
+        continue-on-error: true
+        with:
+          package-name: autoendpoint
+          package-type: "container"
+          min-versions-to-keep: 2
+          delete-only-untagged-versions: "true"
+
+  manifest-autoconnect:
+    needs: build-autoconnect
+    runs-on: ubuntu-24.04
+    if: needs.build-autoconnect.result == 'success'
+    env:
+      ghcr_slug: ghcr.io/forkdo/autoconnect
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v6
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Create and push multi-arch manifest
+        run: |
+          docker manifest create ${{ env.ghcr_slug }}:dev \
+            --amend ${{ env.ghcr_slug }}:dev-amd64 \
+            --amend ${{ env.ghcr_slug }}:dev-arm64
+          docker manifest push ${{ env.ghcr_slug }}:dev
+        shell: bash
+
+      - uses: actions/delete-package-versions@v5
+        continue-on-error: true
+        with:
+          package-name: autoconnect
+          package-type: "container"
+          min-versions-to-keep: 2
+          delete-only-untagged-versions: "true"
